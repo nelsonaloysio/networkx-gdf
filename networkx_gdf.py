@@ -8,9 +8,14 @@ import pandas as pd
 TYPES = {
     "VARCHAR": str,
     "INT": int,
-    "DOUBLE": float,
     "FLOAT": float,
+    "DOUBLE": float,
     "BOOLEAN": bool,
+}
+
+QUOTES = {
+    "single": "'",
+    "double": '"',
 }
 
 
@@ -34,19 +39,34 @@ class GDF(object):
         def get_def(content):
             return {
                 field[0]:
-                    TYPES.get(field[1], str)
+                    TYPES.get(field[1], str) if len(field) > 1 else str
                 for field in [
                     tuple(_.rsplit(" ", 1))
                     for _ in content.split("\n", 1)[0].split(">", 1)[-1].split(",")
                 ]
             }
 
+        def get_list(content, **params):
+            exception = ""
+
+            for quote, char in QUOTES.items():
+                try:
+                    return pd.read_csv(StringIO(content), quotechar=char, **params)
+
+                except Exception as e:
+                    exception += f"\n  {type(e).__name__}: {str(e).rstrip()} ({quote} quotes)"
+
+            raise Exception("unable to read data from file considering both single"
+                            f"and double quotes as text delimiter.{exception}")
+
         # Gather node and edge definitions.
         with open(path, "r") as f:
             nodes, edges = f.read().split("nodedef>", 1)[-1].split("edgedef>", 1)
             nodedef, edgedef = get_def(nodes), get_def(edges)
-            nodes = pd.read_csv(StringIO(nodes), names=list(nodedef.keys()), dtype=nodedef, header=0, index_col="name")
-            edges = pd.read_csv(StringIO(edges), names=list(edgedef.keys()), dtype=edgedef, header=0)
+
+        # Build node and edge list assuming single or double quotes as text delimiters.
+        nodes = get_list(nodes, names=list(nodedef.keys()), dtype=nodedef, header=0, index_col="name")
+        edges = get_list(edges, names=list(edgedef.keys()), dtype=edgedef, header=0,)
 
         # Read directed attribute from data if found.
         if directed is None and "directed" in edges.columns:
@@ -107,7 +127,7 @@ class GDF(object):
 
         def get_columns(df):
             """ Add attribute type to column names. """
-            return [f"{key} {types.get(value.__str__().rstrip('0123456789'), 'VARCHAR')}"
+            return [f"{key} {types.get(value.__str__().lower().rstrip('0123456789'), 'VARCHAR')}"
                     for key, value in df.dtypes.to_dict().items()]
 
         def get_nodes(G):
@@ -118,7 +138,7 @@ class GDF(object):
                     index=G.nodes(),
                 )\
                 .astype(
-                    int,
+                    "Int64",
                     errors="ignore"
                 )
             nodes.index.name = "nodedef>name VARCHAR"
@@ -141,8 +161,8 @@ class GDF(object):
             return edges
 
         # Write nodes and edges to GDF file.
-        get_nodes(G).to_csv(path, index=True, mode="w")
-        get_edges(G).to_csv(path, index=False, mode="a")
+        get_nodes(G).to_csv(path, index=True, quotechar="'", mode="w")
+        get_edges(G).to_csv(path, index=False, quotechar="'", mode="a")
 
 
 read_gdf = GDF.read_gdf
