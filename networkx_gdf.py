@@ -1,5 +1,6 @@
 from io import StringIO
 from abc import abstractmethod
+from csv import QUOTE_MINIMAL
 from typing import Optional, Union
 
 import networkx as nx
@@ -32,8 +33,10 @@ class GDF(object):
         multigraph: Optional[bool] = None,
         node_attr: Optional[Union[list, bool]] = True,
         edge_attr: Optional[Union[list, bool]] = True,
-    ) -> nx.Graph:
-        """ Returns a NetworkX graph object from a Geographic Data File. """
+    ) -> nx.Graph or nx.DiGraph or nx.MultiGraph or nx.MultiDiGraph:
+        """
+        Returns a NetworkX graph object from Graph Data File.
+        """
         source, target = "node1", "node2"
 
         def get_def(content):
@@ -51,12 +54,16 @@ class GDF(object):
 
             for quote, char in QUOTES.items():
                 try:
-                    return pd.read_csv(StringIO(content), quotechar=char, **params)
+                    return pd.read_csv(StringIO(content),
+                                       quotechar=char,
+                                       escapechar="\\",
+                                       na_filter=False,
+                                       **params)
 
                 except Exception as e:
-                    exception += f"\n  {type(e).__name__}: {str(e).rstrip()} ({quote} quotes)"
+                    exception += f"\n{type(e).__name__}: {str(e).rstrip()} ({quote} quotes)"
 
-            raise Exception("unable to read data from file considering both single"
+            raise Exception("unable to read data from file considering both single "
                             f"and double quotes as text delimiter.{exception}")
 
         # Gather node and edge definitions.
@@ -66,46 +73,38 @@ class GDF(object):
 
         # Build node and edge list assuming single or double quotes as text delimiters.
         nodes = get_list(nodes, names=list(nodedef.keys()), dtype=nodedef, header=0, index_col="name")
-        edges = get_list(edges, names=list(edgedef.keys()), dtype=edgedef, header=0,)
+        edges = get_list(edges, names=list(edgedef.keys()), dtype=edgedef, header=0)
 
-        # Read directed attribute from data if found.
+        # Read 'directed' attribute from data if found.
         if directed is None and "directed" in edges.columns:
-            directed = edges["directed"][0]
+            directed = bool(edges["directed"][0])
 
-            if len(edges["directed"].unique()) > 1:
-                raise NotImplementedError("Graphs with both directed and undirected edges are not supported.")
+            if edges["directed"].unique().shape[0] > 1:
+                raise NotImplementedError(
+                    "Graphs with both directed and undirected edges are not supported, "
+                    "please specify `directed=False` or `directed=True`.")
 
         # Allow multiple edges among nodes if found.
-        if multigraph is None:
-            multigraph = 1 != edges[[source, target]].value_counts(ascending=True).unique()[-1]
+        if multigraph is None and edges[[source, target]].duplicated().any():
+            multigraph = True
 
         # Object type to build graph with.
         create_using = nx.DiGraph() if directed else nx.Graph()
         if multigraph:
             create_using = nx.MultiDiGraph() if directed else nx.MultiGraph()
 
-        # List of edge attributes.
+        # Edge attributes to consider.
         if edge_attr is True:
-            edge_attr = [_ for _ in edges.columns.tolist() if _ not in (source, target)]
-
-        # Consider edge weights.
-        if not multigraph and "weight" not in edges.columns:
-            edge_attr = ["weight"] + (edge_attr if edge_attr else [])
-            weights = edges[[source, target]].value_counts()
-
-            with pd.option_context("mode.chained_assignment", None):
-                edges["weight"] = [weights.loc[x, y] for x, y in zip(edges[source], edges[target])]
+            edge_attr = [_ for _ in edges.columns if _ not in [source, target] +
+                         (["directed"] if edges["directed"].unique().shape[0] == 1 else [])]
 
         # Convert edge list to graph.
-        G = nx\
-            .convert_matrix\
-            .from_pandas_edgelist(
-                edges,
-                source=source,
-                target=target,
-                edge_attr=list(edges.columns)[2:] if edge_attr == True else (edge_attr or None),
-                create_using=create_using
-        )
+        G = nx.convert_matrix\
+              .from_pandas_edgelist(edges,
+                                    source=source,
+                                    target=target,
+                                    edge_attr=edge_attr or None,
+                                    create_using=create_using)
 
         # Add any missing nodes not within edge list.
         G.add_nodes_from(nodes.index)
@@ -122,7 +121,10 @@ class GDF(object):
         path: str,
         node_attr: Optional[Union[list, bool]] = True,
         edge_attr: Optional[Union[list, bool]] = True,
-    ):
+    ) -> None:
+        """
+        Writes a NetworkX graph object to Graph Data File.
+        """
         types = {value.__name__: key for key, value in TYPES.items()}
 
         def get_columns(df):
@@ -132,22 +134,15 @@ class GDF(object):
 
         def get_nodes(G):
             """ Build node list with attributes. """
-            nodes = pd\
-                .DataFrame(
-                    dict(G.nodes(data=True)).values(),
-                    index=G.nodes(),
-                )\
-                .astype(
-                    "Int64",
-                    errors="ignore"
-                )
-            nodes.index.name = "nodedef>name VARCHAR"
+            nodes = pd.DataFrame(dict(G.nodes(data=True)).values(),
+                                 index=G.nodes())
 
             if node_attr not in (True, None):
                 nodes = nodes.loc[:, (node_attr if node_attr else [])]
 
             nodes.columns = get_columns(nodes)
-            return nodes
+            nodes.index.name = "nodedef>name VARCHAR"
+            return nodes.fillna("")
 
         def get_edges(G):
             """ Build edge list with attributes. """
@@ -157,12 +152,25 @@ class GDF(object):
             if edge_attr not in (True, None):
                 edges = edges.loc[:, edges.columns[:2].tolist() + (edge_attr if edge_attr else [])]
 
-            edges.columns = get_columns(edges)
-            return edges
+            if "directed" not in edges.columns:
+                edges["directed"] = True if G.is_directed() else False
 
-        # Write nodes and edges to GDF file.
-        get_nodes(G).to_csv(path, index=True, quotechar="'", mode="w")
-        get_edges(G).to_csv(path, index=False, quotechar="'", mode="a")
+            edges.columns = get_columns(edges)
+            return edges.fillna("")
+
+        get_nodes(G).to_csv(path,
+                            index=True,
+                            quoting=QUOTE_MINIMAL,
+                            quotechar="'",
+                            escapechar="\\",
+                            mode="w")
+
+        get_edges(G).to_csv(path,
+                            index=False,
+                            quoting=QUOTE_MINIMAL,
+                            quotechar="'",
+                            escapechar="\\",
+                            mode="a")
 
 
 read_gdf = GDF.read_gdf
