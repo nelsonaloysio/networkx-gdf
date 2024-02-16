@@ -96,12 +96,15 @@ class GDF():
         G = getattr(nx, f"{'Multi' if multigraph else ''}{'Di' if directed else ''}Graph")()
 
         # Add nodes and edges to graph.
-        G.add_nodes_from(list(zip(nodes.index,
-                                  nodes.to_dict(orient="records"))))
+        G.add_nodes_from(list(
+            zip(nodes.index, nodes.to_dict(orient="records"))
+            if node_attr else nodes.index
+        ))
 
-        G.add_edges_from(list(zip(edges[source],
-                                  edges[target],
-                                  edges.loc[:, edge_attr].to_dict(orient="records"))))
+        G.add_edges_from(list(
+            zip(edges[source], edges[target], edges[edge_attr].to_dict(orient="records"))
+            if edge_attr else zip(edges[source], edges[target])
+        ))
 
         # Assign weight to edges.
         if not multigraph:
