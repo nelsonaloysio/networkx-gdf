@@ -97,7 +97,7 @@ class GDF():
 
         # Add nodes and edges to graph.
         G.add_nodes_from(list(
-            zip(nodes.index, nodes.to_dict(orient="records"))
+            zip(nodes.index, nodes[node_attr].to_dict(orient="records"))
             if node_attr else nodes.index
         ))
 
