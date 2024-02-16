@@ -8,6 +8,7 @@ import pandas as pd
 TYPES = {
     "VARCHAR": str,
     "INT": int,
+    "LONG": int,
     "FLOAT": float,
     "DOUBLE": float,
     "BOOLEAN": bool,
@@ -18,8 +19,10 @@ QUOTES = {
     "double": '"',
 }
 
+M = 2**31
 
-class GDF(object):
+
+class GDF():
 
     @abstractmethod
     def __init__(self):
@@ -30,8 +33,8 @@ class GDF(object):
         path: str,
         directed: Optional[bool] = None,
         multigraph: Optional[bool] = None,
-        node_attr: Optional[Union[list, bool]] = True,
-        edge_attr: Optional[Union[list, bool]] = True,
+        node_attr: Optional[Union[list, bool]] = None,
+        edge_attr: Optional[Union[list, bool]] = None,
     ) -> nx.Graph:
         """ Returns a NetworkX graph object from a Geographic Data File. """
         source, target = "node1", "node2"
@@ -66,7 +69,7 @@ class GDF(object):
 
         # Build node and edge list assuming single or double quotes as text delimiters.
         nodes = get_list(nodes, names=list(nodedef.keys()), dtype=nodedef, header=0, index_col="name")
-        edges = get_list(edges, names=list(edgedef.keys()), dtype=edgedef, header=0,)
+        edges = get_list(edges, names=list(edgedef.keys()), dtype=edgedef, header=0)
 
         # Read directed attribute from data if found.
         if directed is None and "directed" in edges.columns:
@@ -82,47 +85,36 @@ class GDF(object):
         if multigraph is None:
             multigraph = 1 != edges[[source, target]].value_counts(ascending=True).unique()[-1]
 
-        # Object type to build graph with.
-        create_using = nx.DiGraph() if directed else nx.Graph()
-        if multigraph:
-            create_using = nx.MultiDiGraph() if directed else nx.MultiGraph()
+        # Node and edge attributes to consider.
+        node_attr = nodes.columns.tolist()\
+                    if node_attr in (True, None) else (node_attr or [])
 
-        # List of edge attributes.
-        if edge_attr is True:
-            edge_attr = [_ for _ in edges.columns.tolist() if _ not in (source, target)]
+        edge_attr = [_ for _ in edges.columns if _ not in (source, target)]\
+                    if edge_attr in (True, None) else (edge_attr or [])
 
-        # Consider edge weights.
+        # Initialize graph object with determined type.
+        G = getattr(nx, f"{'Multi' if multigraph else ''}{'Di' if directed else ''}Graph")()
+
+        # Add nodes and edges to graph.
+        G.add_nodes_from(list(zip(nodes.index,
+                                  nodes.to_dict(orient="records"))))
+
+        G.add_edges_from(list(zip(edges[source],
+                                  edges[target],
+                                  edges.loc[:, edge_attr].to_dict(orient="records"))))
+
+        # Assign weight to edges.
         if not multigraph:
-            weight = pd.DataFrame({"source": edges[source],
-                                   "target": edges[target],
-                                   "weight": edges["weight"] if "weight" in edges.columns else 1})\
-                        .groupby(["source", "target"])\
-                        .sum("weight")\
-                        .squeeze("columns")
-            if weight.min() == 1 == weight.max():
-                weight = None
+            weight = pd\
+                .DataFrame({"source": edges[source],
+                            "target": edges[target],
+                            "weight": edges["weight"] if "weight" in edges.columns else 1})\
+                .groupby(["source", "target"])\
+                .sum("weight")\
+                .squeeze("columns")
 
-        # Convert edge list to graph.
-        G = nx\
-            .convert_matrix\
-            .from_pandas_edgelist(
-                edges,
-                source=source,
-                target=target,
-                edge_attr=list(edges.columns)[2:] if edge_attr == True else (edge_attr or None),
-                create_using=create_using
-        )
-
-        # Add any missing nodes not within edge list.
-        G.add_nodes_from(nodes.index)
-
-        # Assign attributes to nodes in graph.
-        for attr in (list(nodes.columns) if node_attr == True else (node_attr or [])):
-            nx.set_node_attributes(G, nodes[attr], attr)
-
-        # Assign weight attribute to edges in graph.
-        if not multigraph and weight is not None:
-            nx.set_edge_attributes(G, weight, "weight")
+            if not weight.min() == 1 == weight.max():
+                nx.set_edge_attributes(G, weight, "weight")
 
         return G
 
@@ -130,19 +122,23 @@ class GDF(object):
     def write_gdf(
         G: nx.Graph,
         path: str,
-        node_attr: Optional[Union[list, bool]] = True,
-        edge_attr: Optional[Union[list, bool]] = True,
-    ):
+        node_attr: Optional[Union[list, bool]] = None,
+        edge_attr: Optional[Union[list, bool]] = None,
+    ) -> None:
         types = {value.__name__: key for key, value in TYPES.items()}
 
-        def get_type(dtype):
+        def get_type(series):
             """ Add attribute type to column names. """
-            return f"{types.get(dtype.__str__().lower().rstrip('0123456789'), 'VARCHAR')}"
+            dtype = f"{types.get(series.dtype.__str__().lower().rstrip('0123456789'), 'VARCHAR')}"
+            if dtype == "LONG" and all(-M <= m < M for m in (series.min(), series.max())):
+                return "INT"
+            if dtype == "DOUBLE" and series.astype(str).apply(str.__len__).max() <= 8:
+                return "FLOAT"
+            return dtype
 
         def get_columns(df):
             """ Add attribute type to column names. """
-            return [f"{column} {get_type(dtype)}"
-                    for column, dtype in df.dtypes.to_dict().items()]
+            return [f"{column} {get_type(df[column])}" for column in df.columns.tolist()]
 
         def get_nodes(G):
             """ Build node list with attributes. """
@@ -150,12 +146,8 @@ class GDF(object):
                 .DataFrame(
                     dict(G.nodes(data=True)).values(),
                     index=G.nodes(),
-                )\
-                .astype(
-                    "Int64",
-                    errors="ignore"
                 )
-            nodes.index.name = f"nodedef>name {get_type(nodes.index.dtype)}"
+            nodes.index.name = f"nodedef>name {get_type(nodes.index)}"
 
             if node_attr not in (True, None):
                 nodes = nodes.loc[:, (node_attr if node_attr else [])]
