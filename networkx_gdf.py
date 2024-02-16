@@ -70,10 +70,13 @@ class GDF(object):
 
         # Read directed attribute from data if found.
         if directed is None and "directed" in edges.columns:
-            directed = edges["directed"][0]
-
             if len(edges["directed"].unique()) > 1:
-                raise NotImplementedError("Graphs with both directed and undirected edges are not supported.")
+                raise NotImplementedError(
+                    "Graphs with both directed and undirected edges are not supported.\n"
+                    "Please manually set the 'directed' parameter to True or False to supress this error."
+                )
+            directed = edges["directed"][0]
+            edges.drop("directed", axis=1, inplace=True)
 
         # Allow multiple edges among nodes if found.
         if multigraph is None:
@@ -89,12 +92,15 @@ class GDF(object):
             edge_attr = [_ for _ in edges.columns.tolist() if _ not in (source, target)]
 
         # Consider edge weights.
-        if not multigraph and "weight" not in edges.columns:
-            edge_attr = ["weight"] + (edge_attr if edge_attr else [])
-            weights = edges[[source, target]].value_counts()
-
-            with pd.option_context("mode.chained_assignment", None):
-                edges["weight"] = [weights.loc[x, y] for x, y in zip(edges[source], edges[target])]
+        if not multigraph:
+            weight = pd.DataFrame({"source": edges[source],
+                                   "target": edges[target],
+                                   "weight": edges["weight"] if "weight" in edges.columns else 1})\
+                        .groupby(["source", "target"])\
+                        .sum("weight")\
+                        .squeeze("columns")
+            if weight.min() == 1 == weight.max():
+                weight = None
 
         # Convert edge list to graph.
         G = nx\
@@ -114,6 +120,10 @@ class GDF(object):
         for attr in (list(nodes.columns) if node_attr == True else (node_attr or [])):
             nx.set_node_attributes(G, nodes[attr], attr)
 
+        # Assign weight attribute to edges in graph.
+        if not multigraph and weight is not None:
+            nx.set_edge_attributes(G, weight, "weight")
+
         return G
 
     @staticmethod
@@ -125,10 +135,14 @@ class GDF(object):
     ):
         types = {value.__name__: key for key, value in TYPES.items()}
 
+        def get_type(dtype):
+            """ Add attribute type to column names. """
+            return f"{types.get(dtype.__str__().lower().rstrip('0123456789'), 'VARCHAR')}"
+
         def get_columns(df):
             """ Add attribute type to column names. """
-            return [f"{key} {types.get(value.__str__().lower().rstrip('0123456789'), 'VARCHAR')}"
-                    for key, value in df.dtypes.to_dict().items()]
+            return [f"{column} {get_type(dtype)}"
+                    for column, dtype in df.dtypes.to_dict().items()]
 
         def get_nodes(G):
             """ Build node list with attributes. """
@@ -141,7 +155,7 @@ class GDF(object):
                     "Int64",
                     errors="ignore"
                 )
-            nodes.index.name = "nodedef>name VARCHAR"
+            nodes.index.name = f"nodedef>name {get_type(nodes.index.dtype)}"
 
             if node_attr not in (True, None):
                 nodes = nodes.loc[:, (node_attr if node_attr else [])]
@@ -156,6 +170,9 @@ class GDF(object):
 
             if edge_attr not in (True, None):
                 edges = edges.loc[:, edges.columns[:2].tolist() + (edge_attr if edge_attr else [])]
+
+            if "directed" not in edges.columns and G.is_directed():
+                edges["directed"] = G.is_directed()
 
             edges.columns = get_columns(edges)
             return edges

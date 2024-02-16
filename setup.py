@@ -12,7 +12,7 @@ with open("requirements.txt") as f:
 
 setup(
     name="networkx-gdf",
-    version="1.1",
+    version="1.2",
     description=description.strip(),
     long_description=long_description,
     install_requires=install_requires,
