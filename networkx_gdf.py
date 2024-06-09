@@ -1,9 +1,10 @@
 from io import StringIO
-from abc import abstractmethod
 from typing import Optional, Union
 
 import networkx as nx
 import pandas as pd
+
+from __version__ import __version__
 
 TYPES = {
     "VARCHAR": str,
@@ -23,10 +24,6 @@ M = 2**31
 
 
 class GDF():
-
-    @abstractmethod
-    def __init__(self):
-        """ Abstract method for "DIY" implementations. """
 
     @staticmethod
     def read_gdf(
@@ -109,9 +106,11 @@ class GDF():
         # Assign weight to edges.
         if not multigraph:
             weight = pd\
-                .DataFrame({"source": edges[source],
-                            "target": edges[target],
-                            "weight": edges["weight"] if "weight" in edges.columns else 1})\
+                .DataFrame({
+                    "source": edges[source],
+                    "target": edges[target],
+                    "weight": edges["weight"] if "weight" in edges.columns else 1
+                })\
                 .groupby(["source", "target"])\
                 .sum("weight")\
                 .squeeze("columns")
@@ -133,10 +132,13 @@ class GDF():
         def get_type(series):
             """ Add attribute type to column names. """
             dtype = f"{types.get(series.dtype.__str__().lower().rstrip('0123456789'), 'VARCHAR')}"
+
             if dtype == "LONG" and all(-M <= m < M for m in (series.min(), series.max())):
                 return "INT"
+
             if dtype == "DOUBLE" and series.astype(str).apply(str.__len__).max() <= 8:
                 return "FLOAT"
+
             return dtype
 
         def get_columns(df):

@@ -10,9 +10,12 @@ with open("README.md") as f:
 with open("requirements.txt") as f:
     install_requires = f.read().splitlines()
 
+with open("__version__.py") as f:
+    version = f.read().strip().split()[-1].strip("\"")
+
 setup(
     name="networkx-gdf",
-    version="1.3.2",
+    version=version,
     description=description.strip(),
     long_description=long_description,
     install_requires=install_requires,
