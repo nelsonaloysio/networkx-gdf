@@ -28,11 +28,11 @@ networkx-gdf
    :alt: Documentation Status
 
 .. image:: https://static.pepy.tech/badge/networkx-gdf
-   :target: https://pepy.tech/project/networkx-gdf
+   :target: https://pepy.tech/project/networkx-gdf?versions=*
    :alt: Downloads
 
 .. image:: https://static.pepy.tech/badge/networkx-gdf/month
-   :target: https://pepy.tech/project/networkx-gdf
+   :target: https://pepy.tech/project/networkx-gdf?versions=*
    :alt: Downloads
 
 .. image:: https://img.shields.io/pypi/l/networkx-gdf
