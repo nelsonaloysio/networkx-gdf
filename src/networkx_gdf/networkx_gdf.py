@@ -380,6 +380,8 @@ class GDF():
             if "directed" not in edges.columns and G.is_directed():
                 edges["directed"] = G.is_directed()
 
+            edges = edges.where(edges.notna(), None)
+            edges.fillna("", inplace=True)
             edges.columns = edges.columns.tolist()[:2] + get_columns(edges.iloc[:, 2:])
             return edges
 
