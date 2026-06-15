@@ -49,7 +49,7 @@ tabular format. The package is designed to be lightweight on requirements and ea
 Install
 =======
 
-The package supports **Python 3.7++** and is readily available from `PyPI <https://pypi.org/project/networkx-gdf/>`_:
+The package supports **Python 3.7+** and is readily available from `PyPI <https://pypi.org/project/networkx-gdf/>`_:
 
 .. code-block:: bash
 
