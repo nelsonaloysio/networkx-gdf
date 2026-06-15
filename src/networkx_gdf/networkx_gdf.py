@@ -26,7 +26,8 @@ class GDF():
     Implements :func:`~networkx_gdf.read_gdf` and :func:`~networkx_gdf.write_gdf`
     methods for GDF (Graph Data Format) files.
 
-    GDF is a compact file format originally implemented by `GUESS <https://graphexploration.cond.org/>`__.
+    GDF is a compact file format originally implemented by
+    `GUESS <https://graphexploration.cond.org/>`__.
     Although the software itself is not anymore maintained, the format is still supported by active
     open-source projects such as `Gephi <https://gephi.org/>`__.
     It is based on a tabular text format, and is defined by the simple following rules:
@@ -39,13 +40,13 @@ class GDF():
 
     * Each subsequent line contains an edge and its attributes separated by commas.
 
-    The following object types are supported by the format: ``VARCHAR``, ``INT``, ``LONG``, ``FLOAT``,
-    ``DOUBLE``, and ``BOOLEAN``. The format also supports single and double quotes as text delimiters.
+    The following object types are supported by GDF: ``VARCHAR``, ``INT``, ``LONG``, ``FLOAT``,
+    ``DOUBLE``, and ``BOOLEAN``. It also supports single and double quotes as text delimiters.
 
     .. rubric:: File example
 
-    The example below displays a simple GDF file with two nodes (:math:`A`, :math:`B`) and one edge.
-    Note that nodes here do not have any attributes, so the node table after the first line may be left empty:
+    The example below displays a simple GDF with two nodes (:math:`A`, :math:`B`) and one edge.
+    Note that nodes do not have attributes, so the nodes table may be left empty after the header:
 
     .. code-block:: text
 
@@ -53,8 +54,8 @@ class GDF():
        edgedef>node1 VARCHAR,node2 VARCHAR
        A,B
 
-    A special property named ``directed`` can be added to the edge table to specify directed (``True``)
-    or undirected (``False``) edges. If not found, the graph will be considered as undirected by default.
+    A special property ``directed`` can be added to the edge table to specify directed (``True``)
+    or undirected (``False``) edges. If not found, edges are considered as undirected by default.
 
     .. seealso::
 
@@ -82,7 +83,7 @@ class GDF():
 
        <networkx.classes.graph.Graph object at 0x7f3b9c7b2a60>
 
-    Both methods are static and do not require instantiation as an object if the class is inherited:
+    Both methods are static and do not require instantiation if the class is inherited:
 
     .. code-block:: python
 
@@ -192,10 +193,11 @@ class GDF():
                 try:
                     return pd.read_csv(StringIO(content), quotechar=quotechar, **params)
                 except Exception as e:
-                    exception = f"{exception}\n  {type(e).__name__}: {str(e).rstrip()} ({name} quotes)"
+                    exception += f"\nAttempt with {name} quotes as text delimiter failed: {str(e)}"
 
-            raise Exception("unable to read data from file considering both single"
-                            f"and double quotes as text delimiter.{exception}")
+                raise RuntimeError(
+                    f"{exception}\nUnable to read data from file with quotes as text delimiter."
+                )
 
         def read(file, encoding, errors):
             if hasattr(file, "read"):
@@ -238,8 +240,10 @@ class GDF():
         edgedef = get_def(edges)
 
         # Build node and edge list assuming single or double quotes as text delimiters.
-        nodes = get_list(nodes, names=list(nodedef.keys()), dtype=nodedef, header=0, index_col="name")
-        edges = get_list(edges, names=list(edgedef.keys()), dtype=edgedef, header=0)
+        nodes = get_list(
+            nodes, names=list(nodedef.keys()), dtype=nodedef, header=0, index_col="name")
+        edges = get_list(
+            edges, names=list(edgedef.keys()), dtype=edgedef, header=0)
 
         # Read directed attribute from data if found.
         if directed is None and "directed" in edges.columns:
@@ -306,8 +310,8 @@ class GDF():
         Writes a NetworkX graph object to file path or object.
 
         :param G: NetworkX graph object.
-        :param object file: File object or string containing path to GDF file. Optional. If ``None``
-            (default), returns content as string.
+        :param object file: File object or string containing path to GDF file.
+            Optional. If ``None`` (default), returns content as string.
         :param node_attr: Accepts a ``list`` or ``bool``. Optional. Default is ``True``.
 
            * If a ``list``, only the specified attributes will be considered.
@@ -379,11 +383,13 @@ class GDF():
 
         def write_nodes(G, file):
             """ Write nodes to file. """
-            return get_nodes(G).to_csv(file, index=True, encoding=encoding, errors=errors, quotechar="'", mode="w")
+            return get_nodes(G).to_csv(
+                file, index=True, encoding=encoding, errors=errors, quotechar="'", mode="w")
 
         def write_edges(G, file):
             """ Write edges to file. """
-            return get_edges(G).to_csv(file, index=False, encoding=encoding, errors=errors, quotechar="'", mode="a")
+            return get_edges(G).to_csv(
+                file, index=False, encoding=encoding, errors=errors, quotechar="'", mode="a")
 
         assert node_attr is None or type(node_attr) in (list, bool),\
             f"Expected 'node_attr' to be a list or boolean, received: {type(node_attr)}."
