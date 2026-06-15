@@ -5,6 +5,8 @@ from os import remove
 
 from networkx_gdf import GDF, read_gdf, write_gdf
 
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
 GRAPH = """
 nodedef>name VARCHAR,label VARCHAR
 A,Node A
@@ -17,8 +19,10 @@ A,B,True
 
 def test_networkx_gdf():
     gdf = GDF()
-    assert read_gdf == gdf.read_gdf
-    assert write_gdf == gdf.write_gdf
+    assert GDF.read_gdf == read_gdf
+    assert gdf.read_gdf == read_gdf
+    assert GDF.write_gdf == write_gdf
+    assert gdf.write_gdf == write_gdf
 
     path = "test.gdf"
     with open(path, "w") as f:
@@ -52,9 +56,9 @@ def test_networkx_gdf():
     except NotImplementedError:
         pass
 
-    print("All tests passed!")
     remove("test.gdf")
 
 
 if __name__ == "__main__":
     test_networkx_gdf()
+    print("All tests passed!")
