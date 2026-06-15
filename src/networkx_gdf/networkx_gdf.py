@@ -359,18 +359,20 @@ class GDF():
                     dict(G.nodes(data=True)).values(),
                     index=G.nodes(),
                 )
-            nodes.index.name = f"nodedef>name {get_type(nodes.index)}"
+            nodes.index.name = f"nodedef>name VARCHAR"
 
             if node_attr not in (True, None):
                 nodes = nodes.loc[:, (node_attr if node_attr else [])]
 
+            nodes = nodes.where(nodes.notna(), None)
+            nodes.fillna("", inplace=True)
             nodes.columns = get_columns(nodes)
             return nodes
 
         def get_edges(G):
             """ Build edge list with attributes. """
             edges = nx.to_pandas_edgelist(G)
-            edges.columns = ["edgedef>node1", "node2"] + edges.columns[2:].tolist()
+            edges.columns = ["edgedef>node1 VARCHAR", "node2 VARCHAR"] + edges.columns[2:].tolist()
 
             if edge_attr not in (True, None):
                 edges = edges.loc[:, edges.columns[:2].tolist() + (edge_attr if edge_attr else [])]
@@ -378,7 +380,7 @@ class GDF():
             if "directed" not in edges.columns and G.is_directed():
                 edges["directed"] = G.is_directed()
 
-            edges.columns = get_columns(edges)
+            edges.columns = edges.columns.tolist()[:2] + get_columns(edges.iloc[:, 2:])
             return edges
 
         def write_nodes(G, file):
