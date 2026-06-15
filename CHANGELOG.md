@@ -9,7 +9,25 @@
 ### Removed
 -->
 
-## \[1.5.1\] - 2024-08-26
+## \[1.5.4\] - 2026-06-15
+
+### Changed
+- Node name, source and target types are now saved as `VARCHAR`.
+
+### Fixed
+- Fill `None` values with empty string when writing to file.
+
+## \[1.5.3\] - 2024-09-26
+
+### Fixed
+- Import for test module.
+
+## \[1.5.2\] - 2024-08-28
+
+### Fixed
+- Version import for Python 3.8 and above.
+
+## \[1.5.1\] - 2024-08-27
 
 ### Added
 - Support for PEP 621.
