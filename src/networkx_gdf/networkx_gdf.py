@@ -1,5 +1,5 @@
 from io import BufferedReader, BufferedWriter, BytesIO, StringIO, TextIOWrapper
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 import networkx as nx
 import pandas as pd
@@ -105,6 +105,7 @@ class GDF():
         weighted: Optional[bool] = True,
         node_attr: Optional[Union[list, bool]] = True,
         edge_attr: Optional[Union[list, bool]] = True,
+        fillna: Optional[Any] = None,
         encoding: str = "utf-8",
         errors: str = "strict",
     ) -> nx.Graph:
@@ -167,6 +168,8 @@ class GDF():
 
             * If ``False``, no edge attributes will be considered.
 
+        :param fillna: Value to replace missing values in node and edge attributes. Optional.
+            If ``None`` (default), missing values will be preserved as ``NaN``.
         :param encoding: The encoding of the file. Default is ``'utf-8'``.
             For a list of possible values, see `Python documentation: Standard Encodings
             <https://docs.python.org/3/library/codecs.html#standard-encodings>`__.
@@ -186,7 +189,7 @@ class GDF():
                 ]
             }
 
-        def get_list(content, **params):
+        def get_data(content, **params):
             exception = ""
 
             for quotechar, name in QUOTES.items():
@@ -240,10 +243,14 @@ class GDF():
         edgedef = get_def(edges)
 
         # Build node and edge list assuming single or double quotes as text delimiters.
-        nodes = get_list(
+        nodes = get_data(
             nodes, names=list(nodedef.keys()), dtype=nodedef, header=0, index_col="name")
-        edges = get_list(
+        edges = get_data(
             edges, names=list(edgedef.keys()), dtype=edgedef, header=0)
+
+        if fillna is not None:
+            nodes = nodes.fillna({col: "" for col in nodes.columns if nodes[col].isna().any()})
+            edges = edges.fillna({col: "" for col in edges.columns if edges[col].isna().any()})
 
         # Read directed attribute from data if found.
         if directed is None and "directed" in edges.columns:
@@ -365,7 +372,7 @@ class GDF():
                 nodes = nodes.loc[:, (node_attr if node_attr else [])]
 
             nodes = nodes.where(nodes.notna(), None)
-            nodes.fillna("", inplace=True)
+            nodes = nodes.fillna({col: "" for col in nodes.columns if nodes[col].isna().any()})
             nodes.columns = get_columns(nodes)
             return nodes
 
@@ -381,7 +388,7 @@ class GDF():
                 edges["directed"] = G.is_directed()
 
             edges = edges.where(edges.notna(), None)
-            edges.fillna("", inplace=True)
+            edges = edges.fillna({col: "" for col in edges.columns if edges[col].isna().any()})
             edges.columns = edges.columns.tolist()[:2] + get_columns(edges.iloc[:, 2:])
             return edges
 

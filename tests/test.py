@@ -10,7 +10,7 @@ LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 GRAPH = """
 nodedef>name VARCHAR,label VARCHAR
 A,Node A
-B,Node B
+B,
 edgedef>node1 VARCHAR,node2 VARCHAR,directed BOOLEAN
 A,B,True
 A,B,True
@@ -35,7 +35,6 @@ def test_networkx_gdf():
         assert G.is_directed() == True
         assert G.is_multigraph() == True
         assert G.nodes["A"]["label"] == "Node A"
-        assert G.nodes["B"]["label"] == "Node B"
 
     sio, bio = StringIO(), BytesIO()
     with open(path, "w") as f:
@@ -44,8 +43,9 @@ def test_networkx_gdf():
     with open(path, "r") as f:
         assert GRAPH.lstrip() == f.read() == sio.read() == bio.read().decode()
 
-    G = read_gdf(path, directed=False)
+    G = read_gdf(path, directed=False, fillna="")
     assert G.is_directed() == False
+    assert G.nodes["B"]["label"] == ""
 
     G = read_gdf(path, multigraph=False)
     assert G.is_multigraph() == False
